@@ -175,6 +175,19 @@
             100% { filter: hue-rotate(360deg); }
         }
 
+        .player-id-display {
+            margin-bottom: 20px;
+            color: #fff;
+            font-size: 1.1rem;
+            text-align: center;
+            cursor: pointer;
+            transition: color 0.2s ease;
+        }
+
+        .player-id-display:hover {
+            color: #60a5fa;
+        }
+
         .skin-preview {
             margin-top: 15px;
             padding: 15px;
@@ -502,6 +515,25 @@
             width: 200px;
             height: 200px;
             margin: 20px auto 0;
+            touch-action: none;
+        }
+
+        .control-legend {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+            color: rgba(255, 255, 255, 0.85);
+            margin-top: 15px;
+            font-size: 0.95rem;
+            text-align: center;
+        }
+
+        .control-legend span {
+            background: rgba(255, 255, 255, 0.08);
+            padding: 6px 12px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
         }
 
         .touch-btn {
@@ -609,6 +641,7 @@
         </div>
 
         <div class="menu-section">
+            <div class="player-id-display" id="player-id-display">当前玩家：<span id="player-id">玩家</span></div>
             <h2>选择皮肤</h2>
             <div class="skin-selector" id="skin-selector">
                 <button class="skin-btn green active" data-skin="green" title="绿色"></button>
@@ -659,8 +692,13 @@
             <button class="game-btn" id="back-btn">返回菜单</button>
         </div>
 
+        <div class="control-legend">
+            <span>电脑按键: ↑ ↓ ← → 或W A S D</span>
+            <span>手机按键: 下方触控按钮</span>
+        </div>
+
         <div class="instructions">
-            使用 ↑ ↓ ← → 方向键控制蛇的移动 | 空格键暂停
+            使用键盘或触控按钮控制蛇的移动 | 空格键暂停
         </div>
     </div>
 
@@ -726,9 +764,12 @@
         const menuStartBtn = document.getElementById('menu-start-btn');
         const menuContainer = document.getElementById('menu-container');
         const gameContainer = document.getElementById('game-container');
+        const playerIdElement = document.getElementById('player-id');
+        const playerIdDisplay = document.getElementById('player-id-display');
 
         const GRID_SIZE = 20;
-        const GRID_COUNT = canvas.width / GRID_SIZE;
+        const GRID_COLS = canvas.width / GRID_SIZE;
+        const GRID_ROWS = canvas.height / GRID_SIZE;
 
         let snake = [];
         let food = {};
@@ -822,38 +863,48 @@
 
         function generateObstacles(count) {
             obstacles = [];
-            for (let i = 0; i < count; i++) {
-                let obstacle;
-                let attempts = 0;
-                do {
-                    obstacle = {
-                        x: Math.floor(Math.random() * (GRID_COUNT - 2)) + 1,
-                        y: Math.floor(Math.random() * (GRID_COUNT - 2)) + 1
-                    };
-                    attempts++;
-                } while (isObstacleCollision(obstacle) && attempts < 100);
-                obstacles.push(obstacle);
-            }
-        }
+            const occupied = new Set(snake.map(seg => `${seg.x},${seg.y}`));
+            const availableCells = [];
 
-        function isObstacleCollision(pos) {
-            for (let segment of snake) {
-                if (segment.x === pos.x && segment.y === pos.y) return true;
+            for (let x = 0; x < GRID_COLS; x++) {
+                for (let y = 0; y < GRID_ROWS; y++) {
+                    const key = `${x},${y}`;
+                    if (!occupied.has(key)) {
+                        availableCells.push({ x, y });
+                    }
+                }
             }
-            for (let obs of obstacles) {
-                if (obs.x === pos.x && obs.y === pos.y) return true;
+
+            const maxObstacles = Math.min(count, availableCells.length);
+            for (let i = 0; i < maxObstacles; i++) {
+                const index = Math.floor(Math.random() * availableCells.length);
+                const chosen = availableCells.splice(index, 1)[0];
+                obstacles.push(chosen);
             }
-            return false;
         }
 
         function spawnFood() {
-            food = {
-                x: Math.floor(Math.random() * GRID_COUNT),
-                y: Math.floor(Math.random() * GRID_COUNT)
-            };
-            if (isObstacleCollision(food) || (food.x === snake[0].x && food.y === snake[0].y)) {
-                spawnFood();
+            const occupied = new Set([
+                ...snake.map(seg => `${seg.x},${seg.y}`),
+                ...obstacles.map(obs => `${obs.x},${obs.y}`)
+            ]);
+            const availableCells = [];
+
+            for (let x = 0; x < GRID_COLS; x++) {
+                for (let y = 0; y < GRID_ROWS; y++) {
+                    const key = `${x},${y}`;
+                    if (!occupied.has(key)) {
+                        availableCells.push({ x, y });
+                    }
+                }
             }
+
+            if (availableCells.length === 0) {
+                food = { x: 0, y: 0 };
+                return;
+            }
+
+            food = availableCells[Math.floor(Math.random() * availableCells.length)];
         }
 
         function updateGame() {
@@ -861,12 +912,10 @@
 
             direction = { ...nextDirection };
 
-            const head = { x: snake[0].x + direction.x, y: snake[0].y + direction.y };
-
-            if (head.x < 0 || head.x >= GRID_COUNT || head.y < 0 || head.y >= GRID_COUNT) {
-                gameOver();
-                return;
-            }
+            const head = {
+                x: (snake[0].x + direction.x + GRID_COLS) % GRID_COLS,
+                y: (snake[0].y + direction.y + GRID_ROWS) % GRID_ROWS
+            };
 
             for (let segment of snake) {
                 if (head.x === segment.x && head.y === segment.y) {
@@ -931,11 +980,13 @@
 
             ctx.strokeStyle = 'rgba(100, 200, 255, 0.1)';
             ctx.lineWidth = 1;
-            for (let i = 0; i <= GRID_COUNT; i++) {
+            for (let i = 0; i <= GRID_COLS; i++) {
                 ctx.beginPath();
                 ctx.moveTo(i * GRID_SIZE, 0);
                 ctx.lineTo(i * GRID_SIZE, canvas.height);
                 ctx.stroke();
+            }
+            for (let i = 0; i <= GRID_ROWS; i++) {
                 ctx.beginPath();
                 ctx.moveTo(0, i * GRID_SIZE);
                 ctx.lineTo(canvas.width, i * GRID_SIZE);
@@ -1004,9 +1055,45 @@
                     gradient.addColorStop(0, skin.body[0]);
                     gradient.addColorStop(1, skin.body[1]);
                 }
-                
+
+                const segmentSize = i === snake.length - 1 ? GRID_SIZE - 8 : GRID_SIZE - 4;
+                const offset = i === snake.length - 1 ? 4 : 2;
+                const drawX = segment.x * GRID_SIZE + offset;
+                const drawY = segment.y * GRID_SIZE + offset;
+
                 ctx.fillStyle = gradient;
-                ctx.fillRect(segment.x * GRID_SIZE + 2, segment.y * GRID_SIZE + 2, GRID_SIZE - 4, GRID_SIZE - 4);
+                ctx.fillRect(drawX, drawY, segmentSize, segmentSize);
+
+                if (i === 0) {
+                    ctx.shadowBlur = 0;
+                    ctx.fillStyle = '#111';
+                    const eyeOffset = 6;
+                    const eyeRadius = 2.5;
+                    const headCenterX = segment.x * GRID_SIZE + GRID_SIZE / 2;
+                    const headCenterY = segment.y * GRID_SIZE + GRID_SIZE / 2;
+                    let eye1 = { x: headCenterX - eyeOffset, y: headCenterY - eyeOffset };
+                    let eye2 = { x: headCenterX - eyeOffset, y: headCenterY + eyeOffset };
+
+                    if (direction.x === 1) {
+                        eye1 = { x: headCenterX + eyeOffset, y: headCenterY - eyeOffset };
+                        eye2 = { x: headCenterX + eyeOffset, y: headCenterY + eyeOffset };
+                    } else if (direction.x === -1) {
+                        eye1 = { x: headCenterX - eyeOffset, y: headCenterY - eyeOffset };
+                        eye2 = { x: headCenterX - eyeOffset, y: headCenterY + eyeOffset };
+                    } else if (direction.y === -1) {
+                        eye1 = { x: headCenterX - eyeOffset, y: headCenterY - eyeOffset };
+                        eye2 = { x: headCenterX + eyeOffset, y: headCenterY - eyeOffset };
+                    } else if (direction.y === 1) {
+                        eye1 = { x: headCenterX - eyeOffset, y: headCenterY + eyeOffset };
+                        eye2 = { x: headCenterX + eyeOffset, y: headCenterY + eyeOffset };
+                    }
+
+                    ctx.beginPath();
+                    ctx.arc(eye1.x, eye1.y, eyeRadius, 0, Math.PI * 2);
+                    ctx.arc(eye2.x, eye2.y, eyeRadius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.shadowBlur = 15;
+                }
             }
             ctx.shadowBlur = 0;
 
@@ -1083,17 +1170,22 @@
         function handleKeyDown(e) {
             if (isGameOver) return;
 
-            switch (e.key) {
-                case 'ArrowUp':
+            const key = e.key.toLowerCase();
+            switch (key) {
+                case 'arrowup':
+                case 'w':
                     if (direction.y !== 1) nextDirection = { x: 0, y: -1 };
                     break;
-                case 'ArrowDown':
+                case 'arrowdown':
+                case 's':
                     if (direction.y !== -1) nextDirection = { x: 0, y: 1 };
                     break;
-                case 'ArrowLeft':
+                case 'arrowleft':
+                case 'a':
                     if (direction.x !== 1) nextDirection = { x: -1, y: 0 };
                     break;
-                case 'ArrowRight':
+                case 'arrowright':
+                case 'd':
                     if (direction.x !== -1) nextDirection = { x: 1, y: 0 };
                     break;
                 case ' ':
@@ -1212,6 +1304,10 @@
                 e.preventDefault();
                 handleTouchDirection(btn.classList);
             });
+            btn.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                handleTouchDirection(btn.classList);
+            });
             btn.addEventListener('click', () => {
                 handleTouchDirection(btn.classList);
             });
@@ -1248,6 +1344,7 @@
             } else {
                 playerName = '玩家' + Math.floor(Math.random() * 1000);
             }
+            updatePlayerDisplay();
             nameInputElement.style.display = 'none';
         }
 
@@ -1259,6 +1356,12 @@
             }
         });
 
+        function updatePlayerDisplay() {
+            playerIdElement.textContent = playerName || '未命名玩家';
+        }
+
+        playerIdDisplay.addEventListener('click', showNameInput);
+
         const savedName = localStorage.getItem('snakePlayerName');
         if (savedName) {
             playerName = savedName;
@@ -1268,6 +1371,7 @@
             showNameInput();
         }
 
+        updatePlayerDisplay();
         updateSkinPreview();
     </script>
 </body>
