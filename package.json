@@ -1,0 +1,9 @@
+{
+  "name": "snake-game",
+  "version": "1.0.0",
+  "description": "贪吃蛇小游戏",
+  "scripts": {
+    "start": "python -m http.server 8000 --bind 0.0.0.0",
+    "dev": "python -m http.server 8000 --bind 0.0.0.0"
+  }
+}

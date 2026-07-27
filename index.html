@@ -165,6 +165,13 @@
         .skin-btn.gold::before { background: linear-gradient(135deg, #fde68a, #f59e0b); }
         .skin-btn.cyan::before { background: linear-gradient(135deg, #67e8f9, #06b6d4); }
         .skin-btn.pink::before { background: linear-gradient(135deg, #f9a8d4, #ec4899); }
+        .skin-btn.orange::before { background: linear-gradient(135deg, #fdba74, #fb923c); }
+        .skin-btn.teal::before { background: linear-gradient(135deg, #5eead4, #14b8a6); }
+        .skin-btn.magenta::before { background: linear-gradient(135deg, #f472b6, #db2777); }
+        .skin-btn.random-ball::before {
+            background: linear-gradient(135deg, #f97316, #38bdf8, #f472b6, #a855f7);
+            animation: rainbow 2.5s linear infinite;
+        }
         .skin-btn.rainbow::before { 
             background: linear-gradient(45deg, #ff6b6b, #feca57, #48dbfb, #ff9ff3);
             animation: rainbow 2s linear infinite;
@@ -197,6 +204,18 @@
             align-items: center;
             justify-content: center;
             gap: 5px;
+        }
+
+        .skin-warning {
+            margin-top: 12px;
+            color: #facc15;
+            font-size: 0.95rem;
+            line-height: 1.4;
+            display: none;
+        }
+
+        .skin-warning.show {
+            display: block;
         }
 
         .preview-segment {
@@ -651,6 +670,10 @@
                 <button class="skin-btn gold" data-skin="gold" title="金色"></button>
                 <button class="skin-btn cyan" data-skin="cyan" title="青色"></button>
                 <button class="skin-btn pink" data-skin="pink" title="粉色"></button>
+                <button class="skin-btn orange" data-skin="orange" title="橙色"></button>
+                <button class="skin-btn teal" data-skin="teal" title="青绿"></button>
+                <button class="skin-btn magenta" data-skin="magenta" title="品红"></button>
+                <button class="skin-btn random-ball" data-skin="random-ball" title="随机小球"></button>
                 <button class="skin-btn rainbow" data-skin="rainbow" title="彩虹"></button>
             </div>
             <div class="skin-preview" id="skin-preview">
@@ -660,6 +683,7 @@
                 <div class="preview-segment"></div>
                 <div class="preview-segment"></div>
             </div>
+            <p class="skin-warning" id="skin-warning">随机小球皮肤：食物颜色会随机变化，吃掉后小蛇整体变色。</p>
         </div>
 
         <button class="start-game-btn" id="menu-start-btn">开始游戏</button>
@@ -766,6 +790,7 @@
         const gameContainer = document.getElementById('game-container');
         const playerIdElement = document.getElementById('player-id');
         const playerIdDisplay = document.getElementById('player-id-display');
+        const skinWarning = document.getElementById('skin-warning');
 
         const GRID_SIZE = 20;
         const GRID_COLS = canvas.width / GRID_SIZE;
@@ -788,6 +813,7 @@
         let requiredFoods = 10;
         let baseSpeed = 200;
         let currentSkin = 'green';
+        let snakeBallColor = null;
         let playerName = '';
         let stars = [];
 
@@ -799,6 +825,10 @@
             gold: { head: ['#fde68a', '#f59e0b'], body: ['#fbbf24', '#d97706'], shadow: '#fbbf24' },
             cyan: { head: ['#67e8f9', '#06b6d4'], body: ['#22d3ee', '#0891b2'], shadow: '#22d3ee' },
             pink: { head: ['#f9a8d4', '#ec4899'], body: ['#f472b6', '#db2777'], shadow: '#f472b6' },
+            orange: { head: ['#fed7aa', '#fb923c'], body: ['#fdba74', '#f97316'], shadow: '#fb923c' },
+            teal: { head: ['#5eead4', '#14b8a6'], body: ['#2dd4bf', '#0f766e'], shadow: '#14b8a6' },
+            magenta: { head: ['#f472b6', '#db2777'], body: ['#f9a8d4', '#be185d'], shadow: '#db2777' },
+            'random-ball': { head: ['#f97316', '#38bdf8'], body: ['#f472b6', '#a855f7'], shadow: '#f97316' },
             rainbow: { head: ['#ff6b6b', '#feca57'], body: ['#48dbfb', '#ff9ff3'], shadow: '#ff6b6b' }
         };
 
@@ -831,6 +861,7 @@
                 { x: 9, y: 10 },
                 { x: 8, y: 10 }
             ];
+            snakeBallColor = null;
             direction = { x: 1, y: 0 };
             nextDirection = { x: 1, y: 0 };
             score = 0;
@@ -883,6 +914,20 @@
             }
         }
 
+        function getRandomBallColor() {
+            const ballColors = ['#f97316', '#38bdf8', '#f472b6', '#a855f7', '#16a34a', '#facc15', '#22c55e', '#ec4899'];
+            return ballColors[Math.floor(Math.random() * ballColors.length)];
+        }
+
+        function shadeColor(color, percent) {
+            const num = parseInt(color.slice(1), 16);
+            const amt = Math.round(2.55 * percent);
+            const R = Math.min(255, Math.max(0, (num >> 16) + amt));
+            const G = Math.min(255, Math.max(0, ((num >> 8) & 0x00FF) + amt));
+            const B = Math.min(255, Math.max(0, (num & 0x0000FF) + amt));
+            return `#${(R << 16 | G << 8 | B).toString(16).padStart(6, '0')}`;
+        }
+
         function spawnFood() {
             const occupied = new Set([
                 ...snake.map(seg => `${seg.x},${seg.y}`),
@@ -900,11 +945,25 @@
             }
 
             if (availableCells.length === 0) {
-                food = { x: 0, y: 0 };
+                food = { x: 0, y: 0, color: '#ef4444' };
                 return;
             }
 
-            food = availableCells[Math.floor(Math.random() * availableCells.length)];
+            const chosen = availableCells[Math.floor(Math.random() * availableCells.length)];
+            food = {
+                x: chosen.x,
+                y: chosen.y,
+                color: currentSkin === 'random-ball' ? getRandomBallColor() : '#ef4444'
+            };
+        }
+
+        function hexToRGBA(hex, alpha) {
+            const parsed = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            if (!parsed) return `rgba(255,255,255,${alpha})`;
+            const r = parseInt(parsed[1], 16);
+            const g = parseInt(parsed[2], 16);
+            const b = parseInt(parsed[3], 16);
+            return `rgba(${r},${g},${b},${alpha})`;
         }
 
         function updateGame() {
@@ -937,6 +996,11 @@
                 score += 10;
                 foodsEaten++;
                 scoreElement.textContent = score;
+
+                if (currentSkin === 'random-ball') {
+                    snakeBallColor = food.color;
+                }
+
                 spawnFood();
 
                 if (currentMode === 'levels' && foodsEaten >= requiredFoods) {
@@ -994,6 +1058,9 @@
             }
 
             const glowSize = 50;
+            const ballColor = food.color || '#ef4444';
+            const ballRGBA = hexToRGBA(ballColor, 0.35);
+            const ballRGBAFaint = hexToRGBA(ballColor, 0.12);
             const glowGradient = ctx.createRadialGradient(
                 food.x * GRID_SIZE + GRID_SIZE / 2,
                 food.y * GRID_SIZE + GRID_SIZE / 2,
@@ -1002,9 +1069,9 @@
                 food.y * GRID_SIZE + GRID_SIZE / 2,
                 glowSize
             );
-            glowGradient.addColorStop(0, 'rgba(239, 68, 68, 0.3)');
-            glowGradient.addColorStop(0.5, 'rgba(239, 68, 68, 0.1)');
-            glowGradient.addColorStop(1, 'rgba(239, 68, 68, 0)');
+            glowGradient.addColorStop(0, ballRGBA);
+            glowGradient.addColorStop(0.5, ballRGBAFaint);
+            glowGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
             ctx.fillStyle = glowGradient;
             ctx.fillRect(
                 food.x * GRID_SIZE + GRID_SIZE / 2 - glowSize,
@@ -1021,8 +1088,8 @@
             }
             ctx.shadowBlur = 0;
 
-            ctx.fillStyle = '#ef4444';
-            ctx.shadowColor = '#ef4444';
+            ctx.fillStyle = food.color || '#ef4444';
+            ctx.shadowColor = food.color || '#ef4444';
             ctx.shadowBlur = 10;
             ctx.beginPath();
             ctx.arc(food.x * GRID_SIZE + GRID_SIZE / 2, food.y * GRID_SIZE + GRID_SIZE / 2, GRID_SIZE / 2 - 2, 0, Math.PI * 2);
@@ -1049,8 +1116,13 @@
                     gradient.addColorStop(0, `hsl(${hue}, 80%, 70%)`);
                     gradient.addColorStop(1, `hsl(${hue}, 70%, 50%)`);
                 } else if (i === 0) {
-                    gradient.addColorStop(0, skin.head[0]);
-                    gradient.addColorStop(1, skin.head[1]);
+                    const headColor = snakeBallColor || skin.head[0];
+                    const headColor2 = snakeBallColor ? shadeColor(snakeBallColor, -15) : skin.head[1];
+                    gradient.addColorStop(0, headColor);
+                    gradient.addColorStop(1, headColor2);
+                } else if (snakeBallColor) {
+                    gradient.addColorStop(0, snakeBallColor);
+                    gradient.addColorStop(1, shadeColor(snakeBallColor, -20));
                 } else {
                     gradient.addColorStop(0, skin.body[0]);
                     gradient.addColorStop(1, skin.body[1]);
@@ -1222,9 +1294,13 @@
 
         function selectSkin(skin) {
             currentSkin = skin;
+            if (skin !== 'random-ball') {
+                snakeBallColor = null;
+            }
             skinBtns.forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.skin === skin);
             });
+            skinWarning.classList.toggle('show', skin === 'random-ball');
             updateSkinPreview();
         }
 
@@ -1236,6 +1312,9 @@
                 if (currentSkin === 'rainbow') {
                     const hue = (index * 30) % 360;
                     seg.style.background = `linear-gradient(135deg, hsl(${hue}, 80%, 70%), hsl(${hue}, 70%, 50%))`;
+                } else if (currentSkin === 'random-ball') {
+                    const ballColor = getRandomBallColor();
+                    seg.style.background = `radial-gradient(circle at center, ${ballColor} 0%, ${shadeColor(ballColor, -25)} 100%)`;
                 } else if (index === 0) {
                     seg.style.background = `linear-gradient(135deg, ${skin.head[0]}, ${skin.head[1]})`;
                 } else {
