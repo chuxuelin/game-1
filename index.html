@@ -458,6 +458,127 @@
             background: rgba(255, 255, 255, 0.3);
         }
 
+        .achievement-popup {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 300;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .achievement-popup.show {
+            display: flex;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .achievement-content {
+            background: linear-gradient(135deg, rgba(167, 139, 250, 0.2), rgba(99, 102, 241, 0.2));
+            border-radius: 25px;
+            padding: 50px;
+            text-align: center;
+            max-width: 450px;
+            width: 90%;
+            border: 2px solid rgba(167, 139, 250, 0.5);
+            box-shadow: 0 0 50px rgba(167, 139, 250, 0.3), 0 0 100px rgba(167, 139, 250, 0.1);
+            animation: scaleIn 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        }
+
+        @keyframes scaleIn {
+            0% { transform: scale(0); opacity: 0; }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .achievement-icon {
+            font-size: 6rem;
+            margin-bottom: 20px;
+            animation: bounce 1s ease infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .achievement-title {
+            color: #fbbf24;
+            font-size: 2rem;
+            margin-bottom: 15px;
+            font-weight: bold;
+            text-shadow: 0 0 20px rgba(251, 191, 36, 0.5);
+        }
+
+        .achievement-message {
+            color: #fff;
+            font-size: 1.2rem;
+            margin-bottom: 10px;
+            line-height: 1.6;
+        }
+
+        .achievement-score {
+            color: #4ade80;
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 30px;
+        }
+
+        .achievement-stars {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        .achievement-star {
+            position: absolute;
+            font-size: 2rem;
+            animation: starFall 2s ease-out forwards;
+            opacity: 0;
+        }
+
+        @keyframes starFall {
+            0% {
+                transform: translateY(-100px) rotate(0deg);
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(100vh) rotate(360deg);
+                opacity: 0;
+            }
+        }
+
+        .achievement-btn {
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            color: #000;
+            padding: 15px 50px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 20px rgba(251, 191, 36, 0.4);
+        }
+
+        .achievement-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 30px rgba(251, 191, 36, 0.6);
+        }
+
         .name-input {
             position: fixed;
             top: 0;
@@ -757,6 +878,18 @@
         </div>
     </div>
 
+    <div class="achievement-popup" id="achievement-popup">
+        <div class="achievement-stars" id="achievement-stars"></div>
+        <div class="achievement-content">
+            <div class="achievement-icon" id="achievement-icon">🎊</div>
+            <div class="achievement-title" id="achievement-title">成就达成!</div>
+            <div class="achievement-message" id="achievement-message">恭喜你创造了新纪录!</div>
+            <div class="achievement-score" id="achievement-score">得分: 0</div>
+            <button class="achievement-btn" id="achievement-btn">太棒了!</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.30.0/dist/umd/supabase.min.js"></script>
     <script>
         const canvas = document.getElementById('game-canvas');
         const ctx = canvas.getContext('2d');
@@ -791,6 +924,17 @@
         const playerIdElement = document.getElementById('player-id');
         const playerIdDisplay = document.getElementById('player-id-display');
         const skinWarning = document.getElementById('skin-warning');
+        const achievementPopup = document.getElementById('achievement-popup');
+        const achievementIcon = document.getElementById('achievement-icon');
+        const achievementTitle = document.getElementById('achievement-title');
+        const achievementMessage = document.getElementById('achievement-message');
+        const achievementScore = document.getElementById('achievement-score');
+        const achievementBtn = document.getElementById('achievement-btn');
+        const achievementStars = document.getElementById('achievement-stars');
+
+        const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+        const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         const GRID_SIZE = 20;
         const GRID_COLS = canvas.width / GRID_SIZE;
@@ -803,7 +947,7 @@
         let nextDirection = { x: 1, y: 0 };
         let score = 0;
         let highScore = parseInt(localStorage.getItem('snakeHighScore')) || 0;
-        let leaderboard = JSON.parse(localStorage.getItem('snakeLeaderboard')) || [];
+        let leaderboard = [];
         let gameLoop = null;
         let isPaused = false;
         let isGameOver = false;
@@ -855,6 +999,22 @@
             { speed: 120, obstacles: 12, requiredFoods: 20 }
         ];
 
+        async function loadLeaderboardFromSupabase() {
+            try {
+                const { data, error } = await supabaseClient
+                    .from('scores')
+                    .select('name, score')
+                    .order('score', { ascending: false })
+                    .limit(10);
+
+                if (error) throw error;
+                leaderboard = data || [];
+            } catch (error) {
+                console.error('加载排行榜失败:', error);
+                leaderboard = [];
+            }
+        }
+
         function initGame() {
             snake = [
                 { x: 10, y: 10 },
@@ -890,6 +1050,10 @@
             spawnFood();
             if (gameLoop) clearInterval(gameLoop);
             gameLoop = setInterval(updateGame, baseSpeed);
+        }
+
+        async function initializeLeaderboard() {
+            await loadLeaderboardFromSupabase();
         }
 
         function generateObstacles(count) {
@@ -1179,43 +1343,119 @@
             }
         }
 
-        function gameOver() {
+        async function gameOver() {
             isGameOver = true;
             clearInterval(gameLoop);
-            if (score > highScore) {
+            const wasHighScore = score > highScore;
+            if (wasHighScore) {
                 highScore = score;
                 localStorage.setItem('snakeHighScore', highScore);
                 highScoreElement.textContent = highScore;
             }
-            addToLeaderboard(score);
+            const rank = await addToLeaderboard(score);
             finalScoreElement.textContent = score;
-            gameOverElement.classList.add('show');
+            
+            if (wasHighScore || rank <= 3) {
+                showAchievement(wasHighScore, rank, score);
+            } else {
+                gameOverElement.classList.add('show');
+            }
         }
 
-        function levelComplete() {
+        async function levelComplete() {
             isGameOver = true;
             clearInterval(gameLoop);
             score += currentLevel * 50;
             scoreElement.textContent = score;
-            if (score > highScore) {
+            const wasHighScore = score > highScore;
+            if (wasHighScore) {
                 highScore = score;
                 localStorage.setItem('snakeHighScore', highScore);
                 highScoreElement.textContent = highScore;
             }
-            addToLeaderboard(score);
+            const rank = await addToLeaderboard(score);
             levelScoreElement.textContent = score;
-            levelCompleteElement.classList.add('show');
+            
+            if (wasHighScore || rank <= 3) {
+                showAchievement(wasHighScore, rank, score);
+            } else {
+                levelCompleteElement.classList.add('show');
+            }
         }
 
-        function addToLeaderboard(newScore) {
+        async function addToLeaderboard(newScore) {
             const name = playerName || '玩家' + Math.floor(Math.random() * 1000);
             leaderboard.push({ name: name, score: newScore });
             leaderboard.sort((a, b) => b.score - a.score);
             leaderboard = leaderboard.slice(0, 10);
-            localStorage.setItem('snakeLeaderboard', JSON.stringify(leaderboard));
+            
+            let rank = leaderboard.findIndex(entry => entry.score === newScore && entry.name === name) + 1;
+            if (rank === 0) rank = leaderboard.length;
+
+            try {
+                const { error } = await supabaseClient
+                    .from('scores')
+                    .insert([{ name, score: newScore, created_at: new Date().toISOString() }]);
+                if (error) throw error;
+            } catch (error) {
+                console.error('提交排行榜失败:', error);
+            }
+            
+            return rank;
         }
 
-        function showLeaderboard() {
+        function createStarAnimation() {
+            achievementStars.innerHTML = '';
+            const starEmojis = ['⭐', '🌟', '✨', '💫', '🌟', '⭐'];
+            for (let i = 0; i < 20; i++) {
+                const star = document.createElement('div');
+                star.className = 'achievement-star';
+                star.textContent = starEmojis[Math.floor(Math.random() * starEmojis.length)];
+                star.style.left = Math.random() * 100 + '%';
+                star.style.animationDelay = Math.random() * 2 + 's';
+                star.style.fontSize = (1 + Math.random()) + 'rem';
+                achievementStars.appendChild(star);
+            }
+        }
+
+        function showAchievement(isHighScore, rank, finalScore) {
+            createStarAnimation();
+            
+            if (isHighScore && rank === 1) {
+                achievementIcon.textContent = '🏆';
+                achievementTitle.textContent = '新纪录!';
+                achievementMessage.textContent = `恭喜你创造了新的最高分! 你现在是第一名!`;
+            } else if (isHighScore) {
+                achievementIcon.textContent = '🎉';
+                achievementTitle.textContent = '新纪录!';
+                achievementMessage.textContent = `恭喜你创造了新的最高分!`;
+            } else if (rank === 1) {
+                achievementIcon.textContent = '🥇';
+                achievementTitle.textContent = '第一名!';
+                achievementMessage.textContent = `恭喜你登上排行榜第一名! 太厉害了!`;
+            } else if (rank === 2) {
+                achievementIcon.textContent = '🥈';
+                achievementTitle.textContent = '第二名!';
+                achievementMessage.textContent = `恭喜你获得排行榜第二名! 继续加油!`;
+            } else if (rank === 3) {
+                achievementIcon.textContent = '🥉';
+                achievementTitle.textContent = '第三名!';
+                achievementMessage.textContent = `恭喜你获得排行榜第三名! 不错哦!`;
+            }
+            
+            achievementScore.textContent = `得分: ${finalScore}`;
+            achievementPopup.classList.add('show');
+        }
+
+        function closeAchievement() {
+            achievementPopup.classList.remove('show');
+            gameOverElement.classList.add('show');
+        }
+
+        achievementBtn.addEventListener('click', closeAchievement);
+
+        async function showLeaderboard() {
+            await loadLeaderboardFromSupabase();
             leaderboardContent.innerHTML = '<div class="leaderboard-row header"><div class="rank">排名</div><div class="name">玩家</div><div class="score">得分</div></div>';
             
             if (leaderboard.length === 0) {
@@ -1452,6 +1692,7 @@
 
         updatePlayerDisplay();
         updateSkinPreview();
+        initializeLeaderboard();
     </script>
 </body>
 </html>
