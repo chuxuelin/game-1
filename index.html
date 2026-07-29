@@ -932,9 +932,19 @@
         const achievementBtn = document.getElementById('achievement-btn');
         const achievementStars = document.getElementById('achievement-stars');
 
-        const SUPABASE_URL = 'YOUR_SUPABASE_URL';
-        const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
-        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const SUPABASE_URL = '';
+        const SUPABASE_ANON_KEY = '';
+        let supabaseClient = null;
+        const LOCAL_LEADERBOARD_KEY = 'snakeLeaderboard';
+
+        try {
+            if (SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase?.createClient) {
+                supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            }
+        } catch (error) {
+            console.warn('Supabase init failed:', error);
+            supabaseClient = null;
+        }
 
         const GRID_SIZE = 20;
         const GRID_COLS = canvas.width / GRID_SIZE;
@@ -999,7 +1009,33 @@
             { speed: 120, obstacles: 12, requiredFoods: 20 }
         ];
 
+        function saveLeaderboardToLocalStorage() {
+            try {
+                localStorage.setItem(LOCAL_LEADERBOARD_KEY, JSON.stringify(leaderboard));
+            } catch (error) {
+                console.warn('保存本地排行榜失败:', error);
+            }
+        }
+
+        function loadLeaderboardFromLocalStorage() {
+            try {
+                const stored = localStorage.getItem(LOCAL_LEADERBOARD_KEY);
+                if (stored) {
+                    leaderboard = JSON.parse(stored);
+                    return;
+                }
+            } catch (error) {
+                console.warn('读取本地排行榜失败:', error);
+            }
+            leaderboard = [];
+        }
+
         async function loadLeaderboardFromSupabase() {
+            if (!supabaseClient) {
+                loadLeaderboardFromLocalStorage();
+                return;
+            }
+
             try {
                 const { data, error } = await supabaseClient
                     .from('scores')
@@ -1009,9 +1045,10 @@
 
                 if (error) throw error;
                 leaderboard = data || [];
+                saveLeaderboardToLocalStorage();
             } catch (error) {
                 console.error('加载排行榜失败:', error);
-                leaderboard = [];
+                loadLeaderboardFromLocalStorage();
             }
         }
 
@@ -1392,15 +1429,18 @@
             let rank = leaderboard.findIndex(entry => entry.score === newScore && entry.name === name) + 1;
             if (rank === 0) rank = leaderboard.length;
 
-            try {
-                const { error } = await supabaseClient
-                    .from('scores')
-                    .insert([{ name, score: newScore, created_at: new Date().toISOString() }]);
-                if (error) throw error;
-            } catch (error) {
-                console.error('提交排行榜失败:', error);
+            if (supabaseClient) {
+                try {
+                    const { error } = await supabaseClient
+                        .from('scores')
+                        .insert([{ name, score: newScore, created_at: new Date().toISOString() }]);
+                    if (error) throw error;
+                } catch (error) {
+                    console.error('提交排行榜失败:', error);
+                }
             }
-            
+
+            saveLeaderboardToLocalStorage();
             return rank;
         }
 
