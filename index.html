@@ -808,6 +808,7 @@
         </div>
 
         <button class="start-game-btn" id="menu-start-btn">开始游戏</button>
+        <button class="start-game-btn" id="clear-history-btn" style="background: linear-gradient(135deg, #ef4444, #f97316);">清除历史记录</button>
     </div>
 
     <div class="game-container" id="game-container" style="display: none;">
@@ -919,6 +920,7 @@
         const skinSelector = document.getElementById('skin-selector');
         const skinPreview = document.getElementById('skin-preview');
         const menuStartBtn = document.getElementById('menu-start-btn');
+        const clearHistoryBtn = document.getElementById('clear-history-btn');
         const menuContainer = document.getElementById('menu-container');
         const gameContainer = document.getElementById('game-container');
         const playerIdElement = document.getElementById('player-id');
@@ -1444,6 +1446,32 @@
             return rank;
         }
 
+        async function clearLeaderboardHistory() {
+            localStorage.removeItem(LOCAL_LEADERBOARD_KEY);
+            localStorage.removeItem('snakeHighScore');
+            localStorage.removeItem('snakePlayerName');
+            leaderboard = [];
+            highScore = 0;
+            score = 0;
+            highScoreElement.textContent = highScore;
+            scoreElement.textContent = score;
+            updatePlayerDisplay();
+
+            if (supabaseClient) {
+                try {
+                    const { error } = await supabaseClient
+                        .from('scores')
+                        .delete()
+                        .not('id', 'is', null);
+                    if (error) throw error;
+                } catch (error) {
+                    console.error('远程排行榜清除失败:', error);
+                }
+            }
+
+            alert('排行榜历史已清空。如果你曾在其他设备上保存过本地记录，请刷新那些设备页面以同步最新空白排行榜。');
+        }
+
         function createStarAnimation() {
             achievementStars.innerHTML = '';
             const starEmojis = ['⭐', '🌟', '✨', '💫', '🌟', '⭐'];
@@ -1656,6 +1684,7 @@
             initGame();
         });
         document.addEventListener('keydown', handleKeyDown);
+        clearHistoryBtn.addEventListener('click', clearLeaderboardHistory);
 
         const touchBtns = document.querySelectorAll('.touch-btn');
         touchBtns.forEach(btn => {
