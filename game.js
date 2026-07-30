@@ -109,6 +109,10 @@ const ui = {
     centerRadius: 18,
     activeDirection: null
   }
+  ,
+  // 控制是否显示并可点击左/右侧按键（true = 隐藏并不可点）
+  hideLeftButton: true,
+  hideRightButtons: true
 };
 
 // 初始化
@@ -212,6 +216,9 @@ function handleTouch(touch) {
     }
   } else if (game.state === 'PLAYING') {
     for (const [dir, btn] of Object.entries(ui.directionBtns)) {
+      if (!btn) continue;
+      if (dir === 'left' && ui.hideLeftButton) continue;
+      if ((dir === 'up' || dir === 'down' || dir === 'right') && ui.hideRightButtons) continue;
       if (isInside(x, y, btn)) {
         changeDirection(dir);
         ui.joystick.activeDirection = null;
@@ -531,10 +538,11 @@ function gameLoop() {
     case 'right': head.x += 1; break;
   }
   
-  if (head.x < 0 || head.x >= GRID_COLS || head.y < 0 || head.y >= GRID_ROWS) {
-    onGameOver();
-    return;
-  }
+  // 边界穿越：当蛇头越出边界时从另一侧出现（wrap）
+  if (head.x < 0) head.x = GRID_COLS - 1;
+  else if (head.x >= GRID_COLS) head.x = 0;
+  if (head.y < 0) head.y = GRID_ROWS - 1;
+  else if (head.y >= GRID_ROWS) head.y = 0;
   
   if (game.snake.some(s => s.x === head.x && s.y === head.y)) {
     onGameOver();
@@ -1100,9 +1108,6 @@ function drawUI() {
   
   ctx.fillStyle = '#fff';
   ctx.font = 'bold 16px sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText(`得分: ${game.score}`, 15, 35);
-  
   ctx.textAlign = 'center';
   ctx.fillText(`最高分: ${game.highScore}`, CANVAS_WIDTH / 2, 35);
   
@@ -1116,33 +1121,46 @@ function drawUI() {
   }
   
   // 进度条（关卡模式）
+  // 将得分与进度条放置于屏幕下侧
   if (game.mode === 'levels' && game.state === 'PLAYING' && !game.continuePlaying) {
     const progress = game.foodsEaten / game.requiredFoods;
-    ctx.fillStyle = 'rgba(255,255,255,0.2)';
-    ctx.fillRect(15, 60, CANVAS_WIDTH - 30, 8);
+    const bottomBarY = CANVAS_HEIGHT - 50;
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(15, bottomBarY, CANVAS_WIDTH - 30, 8);
     ctx.fillStyle = '#4ade80';
-    ctx.fillRect(15, 60, (CANVAS_WIDTH - 30) * progress, 8);
+    ctx.fillRect(15, bottomBarY, (CANVAS_WIDTH - 30) * progress, 8);
   } else if (game.mode === 'levels' && game.continuePlaying && game.state === 'PLAYING') {
-    // 继续游玩模式 - 显示渐变条
+    // 继续游玩模式 - 底部显示渐变条
     const time = Date.now() / 500;
     const hue = (time * 50) % 360;
-    ctx.fillStyle = 'rgba(255,255,255,0.2)';
-    ctx.fillRect(15, 60, CANVAS_WIDTH - 30, 8);
+    const bottomBarY = CANVAS_HEIGHT - 50;
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(15, bottomBarY, CANVAS_WIDTH - 30, 8);
     ctx.fillStyle = `hsl(${hue}, 80%, 60%)`;
-    ctx.fillRect(15, 60, CANVAS_WIDTH - 30, 8);
-    // 标签
+    ctx.fillRect(15, bottomBarY, CANVAS_WIDTH - 30, 8);
+    // 标签（在进度条上方）
     ctx.fillStyle = '#fbbf24';
     ctx.font = 'bold 12px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('🔥 极限挑战中', CANVAS_WIDTH / 2, 58);
+    ctx.fillText('🔥 极限挑战中', CANVAS_WIDTH / 2, CANVAS_HEIGHT - 58);
+  }
+
+  // 底部显示得分
+  if (game.state === 'PLAYING') {
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 16px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(`得分: ${game.score}`, 15, CANVAS_HEIGHT - 20);
   }
   
   // 方向按钮
   if (game.state === 'PLAYING') {
-    drawDirectionBtn(ui.directionBtns.up, '↑');
-    drawDirectionBtn(ui.directionBtns.down, '↓');
-    drawDirectionBtn(ui.directionBtns.left, '←');
-    drawDirectionBtn(ui.directionBtns.right, '→');
+    if (!ui.hideRightButtons) {
+      drawDirectionBtn(ui.directionBtns.up, '↑');
+      drawDirectionBtn(ui.directionBtns.down, '↓');
+      drawDirectionBtn(ui.directionBtns.right, '→');
+    }
+    if (!ui.hideLeftButton) drawDirectionBtn(ui.directionBtns.left, '←');
     drawJoystick();
   }
   
@@ -1168,6 +1186,7 @@ function drawUI() {
 }
 
 function drawDirectionBtn(rect, arrow) {
+  if (!rect) return;
   ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
   roundRect(rect.x, rect.y, rect.w, rect.h, 12);
   ctx.fill();
